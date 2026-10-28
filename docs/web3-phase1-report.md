@@ -29,9 +29,9 @@ rollback) was caught in review before any test ran. See sections 3 and 7.
 
 ## 1. Files created and modified
 
-Diff statistics against the Phase 0 tip, excluding lockfiles: **66 files, 5,286 insertions, 5 deletions**. Lockfiles add about 15,600 net lines (section 2).
+Diff statistics against the Phase 0 tip, excluding lockfiles: **67 files, 5,323 insertions, 6 deletions**. Lockfiles add about 15,600 net lines (section 2).
 
-**Modified (11):**
+**Modified (12):**
 
 - `package.json`: `thirdweb` dependency; `web3-api/.*` added to Jest's
   `modulePathIgnorePatterns`; `build-web` now sets a 4 GB heap.
@@ -40,6 +40,9 @@ Diff statistics against the Phase 0 tip, excluding lockfiles: **66 files, 5,286 
 - `tsconfig.json`: `web3-api` excluded from the app's type pass.
 - `webpack.config.js`: wallet SDK packages added to the existing source-map
   filter (165 build warnings to 0).
+- `.oxlintrc.json`: `web3-api` added to the existing override that turns off
+  `import/no-nodejs-modules` for the repo's other Node-only services
+  (`bskylink`, `bskyogcard`, `dev-env`).
 - `.gitignore`: `bskyweb/static/media/*.wasm` and `*.cjs` (new build artefacts).
 - `.env.example`: Web3 variables, all empty.
 - `src/routes.ts`, `src/lib/routes/types.ts`, `src/Navigation.tsx`: the
@@ -261,7 +264,8 @@ All of these actually ran, in this session, on Node 24.22.1 and pnpm 11.23.0.
 
 | Command           | Result                                                                                  |
 | ----------------- | --------------------------------------------------------------------------------------- |
-| `pnpm lint`       | exit 0                                                                                  |
+| `pnpm lint`       | exit 0 (note: this script lints `src` and `modules` only, not `web3-api`; see below)    |
+| `oxlint web3-api` | exit 0, no warnings (run by the pre-commit hook; see below)                             |
 | `pnpm typecheck`  | exit 0 (ios, android, web)                                                              |
 | `pnpm test`       | **76 suites passed, 858 tests passed, 28 todo, 21 snapshots, 0 failed** (Phase 0: 74 / 840) |
 | `pnpm build-web`  | first attempt **failed**, exit 134 (out of memory); after the fix exit 0, 185 s         |
@@ -269,6 +273,19 @@ All of these actually ran, in this session, on Node 24.22.1 and pnpm 11.23.0.
 
 New app tests: 2 suites, 18 tests (flags and network resolution; the wallet store
 through every state, retry, wallet-initiated disconnect and chain changes).
+
+**Lint coverage gap, found by the pre-commit hook.** `pnpm lint` only covers
+`src` and `modules`, so it never looked at `web3-api`. The repo's pre-commit hook
+(`lint-staged` running `oxlint --fix` on staged files) did, and blocked the
+backend commit with 20 findings: Node built-in imports (fixed by the override
+above), inline type specifiers, a named `pg` import, an unused variable, an
+`async` function without `await`, untyped `any` access in tests, and import
+order. All were fixed in the code; the hook was **not** bypassed. One fix
+mattered: the type-aware linter's autofix removed `as Hex` casts that this
+package's `tsc` needs, which would have re-broken the build on every commit, so
+the test hashes are now built with `keccak256` and need no cast. Because runtime
+code changed afterwards (`pg` imports), the live PostgreSQL and PDS suites were
+re-run: still 115 of 115.
 
 **Backend (`web3-api`)**
 
