@@ -68,6 +68,7 @@ import {
 import {Eye_Stroke2_Corner0_Rounded as Eye} from '#/components/icons/Eye'
 import {EyeSlash_Stroke2_Corner0_Rounded as EyeSlash} from '#/components/icons/EyeSlash'
 import {Filter_Stroke2_Corner0_Rounded as Filter} from '#/components/icons/Filter'
+import {Gift1_Stroke2_Corner0_Rounded as GiftIcon} from '#/components/icons/Gift1'
 import {
   Mute_Stroke2_Corner0_Rounded as Mute,
   Mute_Stroke2_Corner0_Rounded as MuteIcon,
@@ -92,6 +93,8 @@ import * as Prompt from '#/components/Prompt'
 import * as Toast from '#/components/Toast'
 import {useAnalytics} from '#/analytics'
 import {IS_INTERNAL} from '#/env'
+import {TipDialog} from '#/features/web3/components/TipDialog'
+import {useCanOfferTip} from '#/features/web3/components/TipProfileButton'
 import {type app} from '#/lexicons'
 
 let PostMenuItems = ({
@@ -141,6 +144,7 @@ let PostMenuItems = ({
   const blockPromptControl = useDialogControl()
   const reportDialogControl = useReportDialogControl()
   const deletePromptControl = useDialogControl()
+  const tipDialogControl = useDialogControl()
   const hidePromptControl = useDialogControl()
   const postInteractionSettingsDialogControl = useDialogControl()
   const quotePostDetachConfirmControl = useDialogControl()
@@ -167,6 +171,7 @@ let PostMenuItems = ({
   )
   const isPostHidden = hiddenPosts && hiddenPosts.includes(postUri)
   const isAuthor = postAuthor.did === currentAccount?.did
+  const canTipAuthor = useCanOfferTip(postAuthor.did)
   const isRootPostAuthor = new AtUri(rootUri).host === currentAccount?.did
   const threadgateHiddenReplies = useMergedThreadgateHiddenReplies({
     threadgateRecord,
@@ -630,6 +635,21 @@ let PostMenuItems = ({
           </>
         )}
 
+        {canTipAuthor && !isAuthor && (
+          <>
+            <Menu.Divider />
+            <Menu.Group>
+              <Menu.Item
+                testID="postDropdownTipBtn"
+                label={l`Tip author`}
+                onPress={() => tipDialogControl.open()}>
+                <Menu.ItemText>{l`Tip author`}</Menu.ItemText>
+                <Menu.ItemIcon icon={GiftIcon} position="right" />
+              </Menu.Item>
+            </Menu.Group>
+          </>
+        )}
+
         {hasSession && (
           <>
             <Menu.Divider />
@@ -813,6 +833,17 @@ let PostMenuItems = ({
           </>
         )}
       </Menu.Outer>
+      {canTipAuthor && (
+        <TipDialog
+          control={tipDialogControl}
+          recipient={{
+            did: postAuthor.did,
+            handle: postAuthor.handle,
+            displayName: postAuthor.displayName,
+          }}
+          postUri={post.uri}
+        />
+      )}
       <Prompt.Basic
         control={deletePromptControl}
         title={l`Delete this post?`}

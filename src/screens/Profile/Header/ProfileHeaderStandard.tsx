@@ -39,6 +39,7 @@ import {useAnalytics} from '#/analytics'
 import {IS_IOS, IS_NATIVE} from '#/env'
 import {InviteFriendsDialog} from '#/features/inviteFriends'
 import {useActorStatus} from '#/features/liveNow'
+import {TipProfileButton} from '#/features/web3/components/TipProfileButton'
 import {type app} from '#/lexicons'
 import {GermButton} from '../components/GermButton'
 import {ProfileHeaderDisplayName} from './DisplayName'
@@ -389,6 +390,7 @@ export function HeaderStandardButtons({
               )}
 
               <MessageProfileButton profile={profile} />
+              <TipProfileButton profile={profile} />
             </>
           )}
 

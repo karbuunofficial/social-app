@@ -7,14 +7,23 @@ import {
   type WalletAdapter,
   WalletError,
   type WalletState,
+  type WalletTransaction,
 } from '#/features/web3/wallet/types'
 
 export type WalletStore = {
   getState(): WalletState
   subscribe(listener: () => void): () => void
-  connect(): Promise<void>
+  /**
+   * With no id: connects directly when exactly one wallet is installed, and
+   * asks the user to choose when there are several.
+   */
+  connect(walletId?: string): Promise<void>
+  /** Leaves the wallet chooser without connecting. */
+  cancelChoosing(): void
   disconnect(): Promise<void>
   switchNetwork(): Promise<void>
+  signMessage(message: string): Promise<`0x${string}`>
+  sendTransaction(tx: WalletTransaction): Promise<`0x${string}`>
 }
 
 /**
@@ -50,6 +59,23 @@ export function createWalletStore(
     })
   }
 
+  const fail = (e: unknown) =>
+    set({
+      status: 'failed',
+      reason: e instanceof WalletError ? e.reason : 'unknown',
+    })
+
+  async function connectTo(walletId: string) {
+    set({status: 'connecting'})
+    try {
+      const snapshot = await adapter.connect(walletId)
+      watch()
+      set(deriveWalletState(snapshot, expectedChainId))
+    } catch (e) {
+      fail(e)
+    }
+  }
+
   return {
     getState: () => state,
     subscribe(listener) {
@@ -58,20 +84,29 @@ export function createWalletStore(
         listeners.delete(listener)
       }
     },
-    async connect() {
+
+    async connect(walletId) {
       if (!adapter.isSupported || state.status === 'connecting') return
+      if (walletId) return connectTo(walletId)
+
       set({status: 'connecting'})
+      let options
       try {
-        const snapshot = await adapter.connect()
-        watch()
-        set(deriveWalletState(snapshot, expectedChainId))
+        options = await adapter.listWallets()
       } catch (e) {
-        set({
-          status: 'failed',
-          reason: e instanceof WalletError ? e.reason : 'unknown',
-        })
+        return fail(e)
       }
+      if (options.length === 0) {
+        return fail(new WalletError('no_wallet_detected'))
+      }
+      if (options.length === 1) return connectTo(options[0].id)
+      set({status: 'choosing', options})
     },
+
+    cancelChoosing() {
+      if (state.status === 'choosing') set({status: 'disconnected'})
+    },
+
     async disconnect() {
       unsubscribeAdapter?.()
       unsubscribeAdapter = undefined
@@ -81,6 +116,7 @@ export function createWalletStore(
         set({status: 'disconnected'})
       }
     },
+
     async switchNetwork() {
       if (state.status !== 'wrong_network') return
       try {
@@ -89,6 +125,25 @@ export function createWalletStore(
         // The wallet reports success through `subscribe`; if the user declines
         // the switch we simply stay in `wrong_network`.
       }
+    },
+
+    signMessage(message) {
+      if (state.status !== 'connected' && state.status !== 'wrong_network') {
+        return Promise.reject(new WalletError('not_connected'))
+      }
+      return adapter.signMessage(message)
+    },
+
+    sendTransaction(tx) {
+      // Payments only ever leave from a wallet that is connected AND on the
+      // expected network.
+      if (state.status === 'wrong_network') {
+        return Promise.reject(new WalletError('wrong_network'))
+      }
+      if (state.status !== 'connected') {
+        return Promise.reject(new WalletError('not_connected'))
+      }
+      return adapter.sendTransaction(tx)
     },
   }
 }
@@ -100,11 +155,8 @@ function getDefaultStore(): WalletStore {
   return defaultStore
 }
 
-export function useWallet(): WalletState & {
-  connect: () => Promise<void>
-  disconnect: () => Promise<void>
-  switchNetwork: () => Promise<void>
-} {
+export function useWallet(): WalletState &
+  Omit<WalletStore, 'getState' | 'subscribe'> {
   const store = getDefaultStore()
   const state = useSyncExternalStore(
     store.subscribe,
@@ -114,7 +166,10 @@ export function useWallet(): WalletState & {
   return {
     ...state,
     connect: store.connect,
+    cancelChoosing: store.cancelChoosing,
     disconnect: store.disconnect,
     switchNetwork: store.switchNetwork,
+    signMessage: store.signMessage,
+    sendTransaction: store.sendTransaction,
   }
 }

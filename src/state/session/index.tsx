@@ -9,7 +9,7 @@ import {
   useState,
   useSyncExternalStore,
 } from 'react'
-import {type Client} from '@atproto/lex'
+import {type Agent, type Client} from '@atproto/lex'
 import {type SessionData} from '@atproto/lex-password-session'
 
 import * as persisted from '#/state/persisted'
@@ -808,6 +808,17 @@ export function useChatClient(): Client {
 /**
  * Account-host client for the active session, or `null` when logged out.
  */
+/**
+ * The active session as a bare fetch agent (it attaches and refreshes the
+ * account's own credentials), or `null` when logged out. For talking to a
+ * service through the PDS with an `atproto-proxy` header where no lexicon
+ * client exists, as the optional Web3 layer does.
+ */
+export function useMaybeSessionAgent(): Agent | null {
+  const bundle = useContext(BundleContext)
+  return bundle?.session ?? null
+}
+
 export function useMaybePdsClient(): Client | null {
   const bundle = useContext(BundleContext)
   return bundle?.session ? bundle.pdsClient : null

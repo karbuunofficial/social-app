@@ -37,7 +37,7 @@ function failureMessage(reason: WalletFailureReason) {
 /**
  * Wallet connection panel. It only connects and disconnects a wallet. A
  * connected wallet is not linked to, or proven to belong to, the signed-in
- * social account.
+ * social account; linking is a separate, signed step (see LinkWalletCard).
  */
 export function WalletPanel() {
   const t = useTheme()
@@ -48,8 +48,8 @@ export function WalletPanel() {
     <View style={[a.gap_lg]} testID="walletPanel">
       <Admonition type="info">
         <Trans>
-          Connecting a wallet does not link it to your account. Wallet linking
-          requires a signed verification and is not available yet.
+          Connecting a wallet does not link it to your account. To link it you
+          will be asked to sign a message that proves you control the wallet.
         </Trans>
       </Admonition>
 
@@ -66,6 +66,36 @@ export function WalletPanel() {
             onPress={() => void wallet.connect()}>
             <ButtonText>
               <Trans>Connect wallet</Trans>
+            </ButtonText>
+          </Button>
+        </View>
+      )}
+
+      {wallet.status === 'choosing' && (
+        <View style={[a.gap_md]} testID="walletStateChoosing">
+          <Text style={[a.text_md, a.font_semi_bold]}>
+            <Trans>Choose a wallet</Trans>
+          </Text>
+          {wallet.options.map(option => (
+            <Button
+              key={option.id}
+              testID={`walletOption-${option.id}`}
+              label={l`Connect ${option.name}`}
+              size="large"
+              color="secondary"
+              onPress={() => void wallet.connect(option.id)}>
+              <ButtonText>{option.name}</ButtonText>
+            </Button>
+          ))}
+          <Button
+            testID="walletChooseCancelBtn"
+            label={l`Cancel`}
+            size="large"
+            color="secondary"
+            variant="ghost"
+            onPress={() => wallet.cancelChoosing()}>
+            <ButtonText>
+              <Trans>Cancel</Trans>
             </ButtonText>
           </Button>
         </View>
@@ -98,6 +128,14 @@ export function WalletPanel() {
               </Trans>
             </Admonition>
           )}
+          <View style={[a.gap_xs]}>
+            <Text style={[a.text_sm, t.atoms.text_contrast_medium]}>
+              <Trans>Wallet</Trans>
+            </Text>
+            <Text testID="walletName" style={[a.text_md, a.font_semi_bold]}>
+              {wallet.walletName}
+            </Text>
+          </View>
           <View style={[a.gap_xs]}>
             <Text style={[a.text_sm, t.atoms.text_contrast_medium]}>
               <Trans>Wallet address</Trans>
