@@ -90,6 +90,7 @@ export async function createServices(
 
   const tipRepo = new PgTipRepository(db)
   const tips = new TippingService({
+    ...(reader ? {reader} : {}),
     repo: tipRepo,
     wallets: walletRepo,
     chains,

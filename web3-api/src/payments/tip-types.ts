@@ -20,6 +20,8 @@ export type TipRecord = {
   checkAttempts: number
   lastError: string | null
   finalizedAt: Date | null
+  /** Chain head when the intent was created; receipts at or before it are rejected. */
+  minBlockNumber: bigint | null
   tx: {
     id: string
     hash: Hex
@@ -42,6 +44,7 @@ export type NewTip = {
   postUri: string | null
   expiresAt: Date
   createdAt: Date
+  minBlockNumber: bigint | null
 }
 
 export type AttachResult =

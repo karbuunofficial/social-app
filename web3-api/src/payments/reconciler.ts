@@ -165,7 +165,7 @@ export class Reconciler {
       return 'rpcErrors'
     }
 
-    const raw = evaluateTransaction({
+    const evaluated = evaluateTransaction({
       expected: {
         token: tip.tokenAddress,
         from: tip.senderWalletAddress,
@@ -177,6 +177,18 @@ export class Reconciler {
       requiredConfirmations: chain.requiredConfirmations,
       previousBlockHash: tx.blockHash,
     })
+
+    /*
+     * A matching transfer mined before the intent existed is a replay of an old
+     * payment, not the payment this intent asked for.
+     */
+    const raw: TxVerdict =
+      receipt &&
+      evaluated.kind !== 'reorged' &&
+      tip.minBlockNumber !== null &&
+      receipt.blockNumber <= tip.minBlockNumber
+        ? {kind: 'failed', reason: 'predates_intent'}
+        : evaluated
 
     /*
      * A lagging RPC node can report a chain head behind the block that already

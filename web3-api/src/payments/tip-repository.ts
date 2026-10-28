@@ -26,6 +26,7 @@ type Row = {
   check_attempts: number
   last_error: string | null
   finalized_at: Date | null
+  min_block_number: string | null
   tx_id: string | null
   tx_hash: string | null
   tx_status: ChainTransactionStatus | null
@@ -41,6 +42,7 @@ const SELECT = `
          pi.sender_wallet_address, pi.recipient_wallet_address,
          pi.amount::text AS amount, pi.status, pi.post_uri, pi.expires_at,
          pi.created_at, pi.check_attempts, pi.last_error, pi.finalized_at,
+         pi.min_block_number::text AS min_block_number,
          t.id AS tx_id, t.tx_hash, t.status AS tx_status,
          t.block_number::text AS tx_block_number, t.block_hash AS tx_block_hash,
          t.confirmations::text AS tx_confirmations, t.created_at AS tx_created_at
@@ -62,6 +64,8 @@ const toRecord = (r: Row): TipRecord => ({
   expiresAt: r.expires_at,
   createdAt: r.created_at,
   checkAttempts: r.check_attempts,
+  minBlockNumber:
+    r.min_block_number === null ? null : BigInt(r.min_block_number),
   lastError: r.last_error,
   finalizedAt: r.finalized_at,
   tx: r.tx_id
@@ -93,8 +97,8 @@ export class PgTipRepository implements TipRepository {
       `INSERT INTO payment_intents
          (sender_did, recipient_did, chain_id, token_address,
           sender_wallet_address, recipient_wallet_address, amount, post_uri,
-          expires_at, created_at, updated_at)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$10) RETURNING id`,
+          expires_at, created_at, updated_at, min_block_number)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$10,$11) RETURNING id`,
       [
         i.senderDid,
         i.recipientDid,
@@ -106,6 +110,7 @@ export class PgTipRepository implements TipRepository {
         i.postUri,
         i.expiresAt,
         i.createdAt,
+        i.minBlockNumber?.toString() ?? null,
       ],
     )
     return (await this.getIntent(rows[0]!.id))!

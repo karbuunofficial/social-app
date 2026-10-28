@@ -39,9 +39,9 @@ describe.skipIf(!url)('postgres schema and repositories', () => {
   beforeAll(async () => {
     pool = new Pool({connectionString: url})
     // Prove the whole history reverts and re-applies cleanly.
-    for (let i = 0; i < 4; i++) await migrate(url!, 'down')
+    for (let i = 0; i < 5; i++) await migrate(url!, 'down')
     const applied = await migrate(url!, 'up')
-    expect(applied).toHaveLength(4)
+    expect(applied).toHaveLength(5)
   })
 
   afterAll(async () => {
@@ -69,7 +69,7 @@ describe.skipIf(!url)('postgres schema and repositories', () => {
       'wallet_challenges',
     ]
     expect(await tables()).toEqual(expected)
-    await migrate(url!, 'down', 4)
+    await migrate(url!, 'down', 5)
     expect(await tables()).toEqual([])
     await migrate(url!, 'up')
     expect(await tables()).toEqual(expected)

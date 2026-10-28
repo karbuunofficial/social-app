@@ -154,6 +154,91 @@ describe.skipIf(!url)(
 
     const row = async (id: string) => (await tipRepo.getIntent(id))!
 
+    describe('replayed transfers', () => {
+      /** Same wiring as the suite, but intents record the chain head. */
+      const withReader = () =>
+        new TippingService({
+          repo: tipRepo,
+          wallets: walletRepo,
+          chains,
+          tokens: new Map([[CHAIN, token]]),
+          config: testConfig(),
+          idempotency: new PgIdempotencyStore(pool),
+          reader: chain,
+          now: () => now,
+        })
+      const createWith = (svc: TippingService) =>
+        svc.createIntent(
+          ALICE,
+          {
+            recipientDid: BOB,
+            chainId: CHAIN,
+            amount: '1.5',
+            senderAddress: alice.address,
+          },
+          nextKey(),
+        )
+
+      it('fails a matching transfer that was mined before the intent existed', async () => {
+        const svc = withReader()
+        chain.head = 1000n
+        const {body} = await createWith(svc)
+        expect((await row(body.tip.id)).minBlockNumber).toBe(1000n)
+        const hash = txHash('old')
+        await svc.submitTransaction(ALICE, {
+          intentId: body.tip.id,
+          txHash: hash,
+        })
+        // A perfectly matching transfer, but from block 990 (before the intent).
+        chain.set(
+          hash,
+          receipt({
+            block: 990n,
+            hash: blockHash('O'),
+            logs: [good(BigInt(body.tip.amountUnits))],
+          }),
+        )
+        chain.head = 1010n
+        expect(await reconciler.runOnce()).toMatchObject({failed: 1})
+        const r = await row(body.tip.id)
+        expect(r.status).toBe('failed')
+        expect(r.tx!.status).toBe('failed')
+      })
+
+      it('confirms a matching transfer mined after the intent', async () => {
+        const svc = withReader()
+        chain.head = 1000n
+        const {body} = await createWith(svc)
+        const hash = txHash('new')
+        await svc.submitTransaction(ALICE, {
+          intentId: body.tip.id,
+          txHash: hash,
+        })
+        chain.set(
+          hash,
+          receipt({
+            block: 1001n,
+            hash: blockHash('N'),
+            logs: [good(BigInt(body.tip.amountUnits))],
+          }),
+        )
+        chain.head = 1010n
+        expect(await reconciler.runOnce()).toMatchObject({confirmed: 1})
+        expect((await row(body.tip.id)).status).toBe('confirmed')
+      })
+
+      it('refuses to create an intent when the head cannot be read', async () => {
+        const svc = withReader()
+        chain.failNext = [new RpcError('timeout', 'x')]
+        await expect(createWith(svc)).rejects.toMatchObject({
+          code: 'chain_unavailable',
+          statusCode: 503,
+        })
+        const {rows} = await pool.query('SELECT 1 FROM payment_intents')
+        expect(rows).toHaveLength(0)
+      })
+    })
+
     describe('creating payment intents', () => {
       it('creates an intent with exact integer units and an unsigned transfer', async () => {
         const {status, body} = await create({amount: '1.5'})

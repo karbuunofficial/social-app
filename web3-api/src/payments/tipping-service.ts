@@ -1,11 +1,13 @@
 import {getAddress, type Hex} from 'viem'
 
 import {type AuditLog} from '../audit.ts'
+import {type ChainReader, RpcError} from '../chain/reader.ts'
 import {type Config} from '../config.ts'
 import {
   badRequest,
   conflict,
   notFound,
+  serviceUnavailable,
   tooManyRequests,
   unprocessable,
 } from '../errors.ts'
@@ -77,6 +79,7 @@ export class TippingService {
   private readonly tokens: ReadonlyMap<number, VerifiedToken>
   private readonly config: TipServiceConfig
   private readonly idempotency: IdempotencyStore
+  private readonly reader: Pick<ChainReader, 'getBlockNumber'> | undefined
   private readonly audit: AuditLog | undefined
   private readonly now: () => Date
 
@@ -88,6 +91,8 @@ export class TippingService {
     tokens: ReadonlyMap<number, VerifiedToken>
     config: TipServiceConfig
     idempotency: IdempotencyStore
+    /** Used to record the chain head when an intent is created. */
+    reader?: Pick<ChainReader, 'getBlockNumber'>
     audit?: AuditLog
     now?: () => Date
   }) {
@@ -97,6 +102,7 @@ export class TippingService {
     this.tokens = deps.tokens
     this.config = deps.config
     this.idempotency = deps.idempotency
+    this.reader = deps.reader
     this.audit = deps.audit
     this.now = deps.now ?? (() => new Date())
   }
@@ -321,6 +327,21 @@ export class TippingService {
       )
     }
 
+    let minBlockNumber: bigint | null = null
+    if (this.reader) {
+      try {
+        minBlockNumber = await this.reader.getBlockNumber(input.chainId)
+      } catch (e) {
+        if (e instanceof RpcError) {
+          throw serviceUnavailable(
+            'chain_unavailable',
+            'The network could not be reached. Please try again.',
+          )
+        }
+        throw e
+      }
+    }
+
     const tip = await this.repo.createIntent({
       senderDid,
       recipientDid: input.recipientDid,
@@ -334,6 +355,7 @@ export class TippingService {
         now.getTime() + this.config.TIP_INTENT_TTL_SECONDS * 1000,
       ),
       createdAt: now,
+      minBlockNumber,
     })
     return {
       tip: this.toPublic(tip),

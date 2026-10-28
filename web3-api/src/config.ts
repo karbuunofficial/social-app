@@ -130,7 +130,12 @@ const envSchema = z
       .min(10)
       .max(100_000)
       .default(300),
-    TRUST_PROXY: bool,
+    /**
+     * Number of trusted reverse-proxy hops in front of this service (0 = none,
+     * X-Forwarded-For ignored). A blanket "trust everything" is not offered:
+     * it lets any client spoof its IP and dodge the per-IP limiter.
+     */
+    TRUST_PROXY: z.coerce.number().int().min(0).max(5).default(0),
     RUN_WORKER: z
       .enum(['true', 'false', '1', '0'])
       .default('true')

@@ -15,7 +15,10 @@ export type ChainReceipt = {
 export type TxVerdict =
   | {kind: 'pending'; reason: 'not_found' | 'awaiting_confirmations'}
   | {kind: 'confirmed'}
-  | {kind: 'failed'; reason: 'reverted' | 'no_matching_transfer'}
+  | {
+      kind: 'failed'
+      reason: 'reverted' | 'no_matching_transfer' | 'predates_intent'
+    }
   | {kind: 'reorged'}
 
 const topicToAddress = (topic: Hex | undefined) =>

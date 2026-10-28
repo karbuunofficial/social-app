@@ -63,7 +63,11 @@ export async function buildServer(deps: ServerDeps): Promise<FastifyInstance> {
           },
     bodyLimit: 16 * 1024,
     // Only trust X-Forwarded-For when explicitly told a trusted proxy fronts us.
-    trustProxy: deps.config.TRUST_PROXY,
+    trustProxy:
+      deps.config.TRUST_PROXY > 0
+        ? // Trust exactly this many hops from the socket, never the whole header.
+          (_addr: string, hop: number) => hop < deps.config.TRUST_PROXY
+        : false,
   })
 
   registerErrorHandler(app)
