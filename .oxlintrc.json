@@ -387,7 +387,8 @@
       "files": [
         "bskylink/**/*.{js,jsx,ts,tsx}",
         "bskyogcard/**/*.{js,jsx,ts,tsx}",
-        "dev-env/**/*.{js,jsx,ts,tsx}"
+        "dev-env/**/*.{js,jsx,ts,tsx}",
+        "web3-api/**/*.{js,jsx,ts,tsx}"
       ],
       "rules": {
         "import/no-nodejs-modules": "off"

@@ -1,0 +1,4 @@
+# Standalone package, like ../dev-env. Intentionally not part of the app's
+# install so the web app's dependency tree and lockfile are unaffected.
+allowBuilds:
+  'esbuild': true
