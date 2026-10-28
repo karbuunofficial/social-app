@@ -24,10 +24,13 @@ overrides:
   'react-native-screens': '4.26.2'
 allowBuilds:
   '@sentry/cli': true
+  'bufferutil': false
   'core-js': false
   'core-js-pure': false
   'esbuild': false
+  'keccak': false
   'unrs-resolver': true
+  'utf-8-validate': false
 patchedDependencies:
   '@formatjs/bigdecimal@0.2.5': patches/@formatjs__bigdecimal@0.2.5.patch
   '@sentry/expo-upload-sourcemaps@8.18.0': patches/@sentry__expo-upload-sourcemaps@8.18.0.patch

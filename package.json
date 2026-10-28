@@ -47,7 +47,7 @@
     "web": "expo start --web",
     "use-build-number": "./scripts/useBuildNumberEnv.sh",
     "use-build-number-with-bump": "./scripts/useBuildNumberEnvWithBump.sh",
-    "build-web": "expo export:web && node ./scripts/post-web-build.js",
+    "build-web": "NODE_OPTIONS=\"--max-old-space-size=4096 $NODE_OPTIONS\" expo export:web && node ./scripts/post-web-build.js",
     "build-all": "pnpm intl:build && pnpm use-build-number-with-bump eas build --platform all",
     "build-ios": "pnpm use-build-number-with-bump eas build -p ios",
     "build-android": "pnpm use-build-number-with-bump eas build -p android",
@@ -258,6 +258,7 @@
     "slugify": "^1.6.9",
     "sonner": "^2.0.7",
     "sonner-native": "0.26.4",
+    "thirdweb": "5.122.0",
     "tippy.js": "^6.3.7",
     "tlds": "^1.234.0",
     "tldts": "^6.1.46",
@@ -347,7 +348,8 @@
     "modulePathIgnorePatterns": [
       "__tests__/.*/__mocks__",
       "__e2e__/.*",
-      "bskylink/.*"
+      "bskylink/.*",
+      "web3-api/.*"
     ],
     "coveragePathIgnorePatterns": [
       "<rootDir>/node_modules/",

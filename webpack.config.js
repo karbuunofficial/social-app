@@ -119,8 +119,12 @@ module.exports = async function (env, argv) {
   )
   config.resolve.fallback = {...config.resolve.fallback, async_hooks: false}
 
-  // react-native-uuid ships sourceMappingURL comments but no .map files.
-  patchSourceMapFilter(config.module.rules, /react-native-uuid/)
+  // react-native-uuid and the wallet SDKs (loaded lazily for the Web3 feature)
+  // ship sourceMappingURL comments but no .map or source files.
+  patchSourceMapFilter(
+    config.module.rules,
+    /react-native-uuid|node_modules\/(@base-org\/account|@coinbase\/wallet-sdk|@walletconnect\/)/,
+  )
   config.module.rules = [
     ...(config.module.rules || []),
     reactNativeWebWebviewConfiguration,
