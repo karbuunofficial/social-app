@@ -20,6 +20,10 @@ export type ChainConfig = {
   requiredConfirmations: number
   /** Undefined until the operator configures a verified address. */
   usdcAddress: Address | undefined
+  /** Block explorer base URL, for transaction links in the UI. */
+  explorerUrl: string
+  /** Blocks after which a confirmed payment is no longer re-checked. */
+  finalityDepth: number
 }
 
 const KNOWN_CHAINS: Record<
@@ -30,11 +34,15 @@ const KNOWN_CHAINS: Record<
     name: 'Base',
     isTestnet: false,
     requiredConfirmations: 20,
+    explorerUrl: 'https://basescan.org',
+    finalityDepth: 60,
   },
   [BASE_SEPOLIA_CHAIN_ID]: {
     name: 'Base Sepolia',
     isTestnet: true,
     requiredConfirmations: 5,
+    explorerUrl: 'https://sepolia.basescan.org',
+    finalityDepth: 15,
   },
 }
 

@@ -14,6 +14,7 @@ import {
 export class MemoryWalletRepository implements WalletRepository {
   challenges = new Map<string, WalletChallenge>()
   links: UserWallet[] = []
+  openPayments = new Set<string>()
 
   withTransaction<T>(fn: (repo: WalletRepository) => Promise<T>): Promise<T> {
     return fn(this)
@@ -21,13 +22,52 @@ export class MemoryWalletRepository implements WalletRepository {
 
   findLinkByAddress(chainId: number, address: string) {
     return Promise.resolve(
-      this.links.find(l => l.chainId === chainId && l.address === address) ??
-        null,
+      this.links.find(
+        l => l.chainId === chainId && l.address === address && !l.revokedAt,
+      ) ?? null,
     )
   }
 
+  findRecentlyReleased(chainId: number, address: string, since: Date) {
+    const rows = this.links
+      .filter(
+        l =>
+          l.chainId === chainId &&
+          l.address === address &&
+          l.revokedAt &&
+          l.revokedAt >= since,
+      )
+      .sort((a, b) => b.revokedAt!.getTime() - a.revokedAt!.getTime())
+    return Promise.resolve(rows[0] ?? null)
+  }
+
   listLinksForDid(did: string) {
-    return Promise.resolve(this.links.filter(l => l.did === did))
+    return Promise.resolve(
+      this.links.filter(l => l.did === did && !l.revokedAt),
+    )
+  }
+
+  getLinkById(id: string) {
+    return Promise.resolve(this.links.find(l => l.id === id) ?? null)
+  }
+
+  revokeLink(id: string, did: string, now: Date) {
+    const l = this.links.find(x => x.id === id && x.did === did && !x.revokedAt)
+    if (!l) return Promise.resolve(null)
+    l.revokedAt = now
+    return Promise.resolve({...l})
+  }
+
+  hasOpenPayments(chainId: number, address: string) {
+    return Promise.resolve(this.openPayments.has(`${chainId}:${address}`))
+  }
+
+  countChallengesSince(did: string, since: Date) {
+    return Promise.resolve(
+      [...this.challenges.values()].filter(
+        c => c.did === did && c.createdAt >= since,
+      ).length,
+    )
   }
 
   supersedeLiveChallenges(did: string, address: string, now: Date) {
@@ -54,6 +94,12 @@ export class MemoryWalletRepository implements WalletRepository {
     return Promise.resolve({...c})
   }
 
+  reopenChallenge(id: string) {
+    const c = this.challenges.get(id)
+    if (c) c.consumedAt = null
+    return Promise.resolve()
+  }
+
   insertLink(link: {
     did: string
     chainId: number
@@ -61,15 +107,30 @@ export class MemoryWalletRepository implements WalletRepository {
     verifiedAt: Date
   }) {
     const existing = this.links.find(
-      l => l.chainId === link.chainId && l.address === link.address,
+      l =>
+        l.chainId === link.chainId &&
+        l.address === link.address &&
+        !l.revokedAt,
     )
     if (existing) return Promise.resolve({wallet: existing, created: false})
     const wallet: UserWallet = {
       id: randomUUID(),
       createdAt: link.verifiedAt,
+      revokedAt: null,
       ...link,
     }
     this.links.push(wallet)
     return Promise.resolve({wallet, created: true})
+  }
+
+  deleteExpiredChallenges(before: Date) {
+    let n = 0
+    for (const [id, c] of this.challenges) {
+      if (c.expiresAt < before) {
+        this.challenges.delete(id)
+        n++
+      }
+    }
+    return Promise.resolve(n)
   }
 }

@@ -8,12 +8,20 @@ import {ZodError} from 'zod'
 export class AppError extends Error {
   readonly statusCode: number
   readonly code: string
+  /** Extra response headers, for example `retry-after`. */
+  readonly headers: Record<string, string>
 
-  constructor(statusCode: number, code: string, message: string) {
+  constructor(
+    statusCode: number,
+    code: string,
+    message: string,
+    headers: Record<string, string> = {},
+  ) {
     super(message)
     this.name = 'AppError'
     this.statusCode = statusCode
     this.code = code
+    this.headers = headers
   }
 }
 
@@ -29,6 +37,15 @@ export const conflict = (code: string, message: string) =>
   new AppError(409, code, message)
 export const unprocessable = (code: string, message: string) =>
   new AppError(422, code, message)
+export const tooManyRequests = (retryAfterSeconds: number) =>
+  new AppError(
+    429,
+    'rate_limited',
+    'Too many requests, please try again later',
+    {'retry-after': String(Math.max(1, Math.ceil(retryAfterSeconds)))},
+  )
+export const serviceUnavailable = (code: string, message: string) =>
+  new AppError(503, code, message)
 export const notImplemented = (message: string) =>
   new AppError(501, 'not_implemented', message)
 
@@ -40,7 +57,7 @@ export function registerErrorHandler(app: FastifyInstance) {
       const body: ErrorBody = {
         error: {code: err.code, message: err.message},
       }
-      return reply.status(err.statusCode).send(body)
+      return reply.status(err.statusCode).headers(err.headers).send(body)
     }
     if (err instanceof ZodError) {
       const body: ErrorBody = {

@@ -1,21 +1,8 @@
 import {type Address, type Hex} from 'viem'
 
 import {type PreparedTransfer} from './erc20.ts'
-import {type ChainReceipt, type TxVerdict} from './receipt.ts'
+import {type TxVerdict} from './receipt.ts'
 import {type PaymentIntent} from './types.ts'
-
-/**
- * Read-only access to a chain. The only network dependency of tipping, kept
- * behind an interface so it can be faked in tests and swapped between RPC
- * providers. It must never be given a signing key.
- */
-export interface ChainReader {
-  getTransactionReceipt(
-    chainId: number,
-    hash: Hex,
-  ): Promise<ChainReceipt | null>
-  getBlockNumber(chainId: number): Promise<bigint>
-}
 
 /**
  * USDC tipping on Base, wallet to wallet. Interface only in Phase 1: there is

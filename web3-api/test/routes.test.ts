@@ -3,8 +3,10 @@ import {afterEach, beforeEach, describe, expect, it} from 'vitest'
 
 import {DevInsecureAuthVerifier} from '../src/auth/dev-insecure.ts'
 import {NSID} from '../src/lexicon-ids.ts'
+import {defaultRouteLimits} from '../src/rate-limit.ts'
 import {buildServer} from '../src/server.ts'
 import {ALICE, makeService, newWallet, testConfig} from './helpers/fixtures.ts'
+import {tippingDisabled} from './helpers/stubs.ts'
 
 type ErrorBody = {error: {code: string}}
 
@@ -13,7 +15,7 @@ let dbUp = true
 
 beforeEach(async () => {
   dbUp = true
-  const {service} = makeService()
+  const {service, repo} = makeService()
   app = await buildServer({
     config: {...testConfig(), CORS_ALLOWED_ORIGINS: ['http://localhost:19006']},
     db: {
@@ -24,6 +26,9 @@ beforeEach(async () => {
     },
     auth: new DevInsecureAuthVerifier(),
     wallets: service,
+    tips: tippingDisabled(repo),
+    nsids: NSID,
+    limits: defaultRouteLimits(10_000),
   })
 })
 

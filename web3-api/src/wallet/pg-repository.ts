@@ -17,6 +17,7 @@ type WalletRow = {
   wallet_address: string
   verified_at: Date
   created_at: Date
+  revoked_at: Date | null
 }
 
 type ChallengeRow = {
@@ -38,6 +39,7 @@ const toWallet = (r: WalletRow): UserWallet => ({
   address: r.wallet_address,
   verifiedAt: r.verified_at,
   createdAt: r.created_at,
+  revokedAt: r.revoked_at,
 })
 
 const toChallenge = (r: ChallengeRow): WalletChallenge => ({
@@ -81,18 +83,69 @@ export class PgWalletRepository implements WalletRepository {
 
   async findLinkByAddress(chainId: number, address: string) {
     const {rows} = await this.q.query<WalletRow>(
-      'SELECT * FROM user_wallets WHERE chain_id = $1 AND wallet_address = $2',
+      `SELECT * FROM user_wallets
+       WHERE chain_id = $1 AND wallet_address = $2 AND revoked_at IS NULL`,
       [chainId, address],
+    )
+    return rows[0] ? toWallet(rows[0]) : null
+  }
+
+  async findRecentlyReleased(chainId: number, address: string, since: Date) {
+    const {rows} = await this.q.query<WalletRow>(
+      `SELECT * FROM user_wallets
+       WHERE chain_id = $1 AND wallet_address = $2 AND revoked_at >= $3
+       ORDER BY revoked_at DESC LIMIT 1`,
+      [chainId, address, since],
     )
     return rows[0] ? toWallet(rows[0]) : null
   }
 
   async listLinksForDid(did: string) {
     const {rows} = await this.q.query<WalletRow>(
-      'SELECT * FROM user_wallets WHERE did = $1 ORDER BY created_at, id',
+      `SELECT * FROM user_wallets WHERE did = $1 AND revoked_at IS NULL
+       ORDER BY created_at, id`,
       [did],
     )
     return rows.map(toWallet)
+  }
+
+  async getLinkById(id: string) {
+    const {rows} = await this.q.query<WalletRow>(
+      'SELECT * FROM user_wallets WHERE id = $1',
+      [id],
+    )
+    return rows[0] ? toWallet(rows[0]) : null
+  }
+
+  async revokeLink(id: string, did: string, now: Date) {
+    // One conditional UPDATE: only the owner can revoke, and only once.
+    const {rows} = await this.q.query<WalletRow>(
+      `UPDATE user_wallets SET revoked_at = $3
+       WHERE id = $1 AND did = $2 AND revoked_at IS NULL
+       RETURNING *`,
+      [id, did, now],
+    )
+    return rows[0] ? toWallet(rows[0]) : null
+  }
+
+  async hasOpenPayments(chainId: number, address: string) {
+    const {rows} = await this.q.query(
+      `SELECT 1 FROM payment_intents
+       WHERE chain_id = $1
+         AND (sender_wallet_address = $2 OR recipient_wallet_address = $2)
+         AND status IN ('created', 'awaiting_confirmation', 'reorged')
+       LIMIT 1`,
+      [chainId, address],
+    )
+    return rows.length > 0
+  }
+
+  async countChallengesSince(did: string, since: Date) {
+    const {rows} = await this.q.query<{n: string}>(
+      'SELECT count(*)::text AS n FROM wallet_challenges WHERE did = $1 AND created_at >= $2',
+      [did, since],
+    )
+    return Number(rows[0]?.n ?? 0)
   }
 
   async supersedeLiveChallenges(did: string, address: string, now: Date) {
@@ -133,6 +186,21 @@ export class PgWalletRepository implements WalletRepository {
     return rows[0] ? toChallenge(rows[0]) : null
   }
 
+  async reopenChallenge(id: string) {
+    await this.q.query(
+      'UPDATE wallet_challenges SET consumed_at = NULL WHERE id = $1',
+      [id],
+    )
+  }
+
+  async deleteExpiredChallenges(before: Date) {
+    const res = await this.q.query(
+      'DELETE FROM wallet_challenges WHERE expires_at < $1',
+      [before],
+    )
+    return res.rowCount ?? 0
+  }
+
   async insertLink(link: {
     did: string
     chainId: number
@@ -142,7 +210,7 @@ export class PgWalletRepository implements WalletRepository {
     const inserted = await this.q.query<WalletRow>(
       `INSERT INTO user_wallets (did, chain_id, wallet_address, verified_at)
        VALUES ($1, $2, $3, $4)
-       ON CONFLICT (chain_id, wallet_address) DO NOTHING
+       ON CONFLICT (chain_id, wallet_address) WHERE revoked_at IS NULL DO NOTHING
        RETURNING *`,
       [link.did, link.chainId, link.address, link.verifiedAt],
     )

@@ -39,11 +39,9 @@ describe.skipIf(!url)('postgres schema and repositories', () => {
   beforeAll(async () => {
     pool = new Pool({connectionString: url})
     // Prove the whole history reverts and re-applies cleanly.
-    await migrate(url!, 'down')
-    await migrate(url!, 'down')
-    await migrate(url!, 'down')
+    for (let i = 0; i < 4; i++) await migrate(url!, 'down')
     const applied = await migrate(url!, 'up')
-    expect(applied).toHaveLength(3)
+    expect(applied).toHaveLength(4)
   })
 
   afterAll(async () => {
@@ -61,15 +59,17 @@ describe.skipIf(!url)('postgres schema and repositories', () => {
       ).rows.map(r => r.table_name)
 
     const expected = [
+      'audit_events',
       'chain_transactions',
       'creator_plans',
+      'idempotency_keys',
       'payment_intents',
       'subscription_entitlements',
       'user_wallets',
       'wallet_challenges',
     ]
     expect(await tables()).toEqual(expected)
-    await migrate(url!, 'down', 3)
+    await migrate(url!, 'down', 4)
     expect(await tables()).toEqual([])
     await migrate(url!, 'up')
     expect(await tables()).toEqual(expected)
@@ -106,9 +106,35 @@ describe.skipIf(!url)('postgres schema and repositories', () => {
       await rejects(
         'INSERT INTO user_wallets (did, chain_id, wallet_address, verified_at) VALUES ($1,$2,$3, now())',
         [BOB, 84532, A],
-        /user_wallets_chain_address_unique/,
+        /user_wallets_active_chain_address_idx/,
       )
       await insert(ALICE, 8453, A)
+    })
+
+    it('frees a wallet for relinking only after it is revoked', async () => {
+      const C = '0x' + 'e'.repeat(40)
+      await insert(ALICE, 84532, C)
+      await pool.query(
+        'UPDATE user_wallets SET revoked_at = now() WHERE wallet_address = $1',
+        [C],
+      )
+      // Revoked rows are history; a new active row is now allowed.
+      await insert(BOB, 84532, C)
+      const {rows} = await pool.query<{did: string; revoked_at: Date | null}>(
+        'SELECT did, revoked_at FROM user_wallets WHERE wallet_address = $1 ORDER BY created_at',
+        [C],
+      )
+      expect(rows).toHaveLength(2)
+      expect(rows.filter(r => r.revoked_at === null)).toHaveLength(1)
+    })
+
+    it('cannot be revoked before it was verified', async () => {
+      await rejects(
+        `INSERT INTO user_wallets (did, chain_id, wallet_address, verified_at, revoked_at)
+         VALUES ($1,84532,$2, now(), now() - interval '1 day')`,
+        [ALICE, '0x' + 'f'.repeat(40)],
+        /user_wallets_revoked_after_verified/,
+      )
     })
   })
 
@@ -224,15 +250,14 @@ describe.skipIf(!url)('postgres schema and repositories', () => {
       )
     })
 
-    it('allows at most one confirmed transaction per intent', async () => {
+    it('allows at most one transaction per intent', async () => {
       const id = await intent('1')
       await tx(id, '0x' + '1'.repeat(64), 'confirmed')
-      await tx(id, '0x' + '2'.repeat(64), 'reorged')
       await rejects(
         `INSERT INTO chain_transactions (chain_id, tx_hash, payment_intent_id, status)
-         VALUES (84532,$1,$2,'confirmed')`,
-        ['0x' + '3'.repeat(64), id],
-        /chain_transactions_one_confirmed_per_intent_idx/,
+         VALUES (84532,$1,$2,'pending')`,
+        ['0x' + '2'.repeat(64), id],
+        /chain_transactions_one_per_intent_idx/,
       )
     })
 
